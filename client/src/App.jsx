@@ -1,25 +1,41 @@
 import { useState } from 'react'
-import axios from 'axios'
 import './App.css'
 import FinancialTable from './components/FinancialTable'
 import DashboardStats from './components/DashboardStats'
+import OrderFilters from './components/OrderFilters'
+import BatchProcessor from './components/BatchProcessor'
+import orderService from './services/orderService'
 
 function App() {
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(false)
   const [exportLoading, setExportLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [filters, setFilters] = useState({})
+  const [pagination, setPagination] = useState(null)
+  const [showBatchProcessor, setShowBatchProcessor] = useState(false)
+  const [lastFetchInfo, setLastFetchInfo] = useState(null)
 
-  const fetchOrders = async () => {
+  const fetchOrders = async (newFilters = filters) => {
+    // Check if we should use batch processing for large datasets
+    if (newFilters.all && shouldUseBatchProcessing(newFilters)) {
+      setShowBatchProcessor(true)
+      return
+    }
+
     setLoading(true)
     setError(null)
     try {
-      const response = await axios.get('/api/orders')
-      if (response.data.success) {
-        setOrders(response.data.data)
-      } else {
-        setError(response.data.error)
-      }
+      const result = await orderService.fetchOrders(newFilters)
+      setOrders(result.orders)
+      setPagination(result.pagination)
+      setLastFetchInfo({
+        timestamp: new Date(),
+        count: result.orders.length,
+        total: result.total,
+        filters: newFilters,
+        description: orderService.formatFiltersDescription(newFilters)
+      })
     } catch (err) {
       setError(err.message)
     } finally {
@@ -29,27 +45,60 @@ function App() {
 
   const downloadCSV = async () => {
     setExportLoading(true)
+    setError(null)
     try {
-      const response = await axios.get('/api/orders/csv', {
-        responseType: 'blob'
-      })
-      
-      const url = window.URL.createObjectURL(new Blob([response.data]))
-      const link = document.createElement('a')
-      link.href = url
-      
-      const timestamp = new Date().toISOString().replace(/[:.]/g, "-")
-      link.setAttribute('download', `financial-records-${timestamp}.csv`)
-      
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      window.URL.revokeObjectURL(url)
+      const result = await orderService.exportCSV(filters)
+      orderService.downloadBlob(result.blob, result.filename)
     } catch (err) {
       setError('Failed to download CSV: ' + err.message)
     } finally {
       setExportLoading(false)
     }
+  }
+
+  const handleFiltersChange = (newFilters) => {
+    setFilters(newFilters)
+    // Auto-fetch when filters change (debounced)
+    clearTimeout(window.filterTimeout)
+    window.filterTimeout = setTimeout(() => {
+      fetchOrders(newFilters)
+    }, 500)
+  }
+
+  const shouldUseBatchProcessing = (filterParams) => {
+    // Use batch processing if:
+    // - Fetching all orders with no date filters (could be huge)
+    // - Date range is very large (more than 90 days)
+    if (filterParams.all) {
+      if (!filterParams.createdAtMin && !filterParams.createdAtMax) {
+        return true // No date limits = potentially huge dataset
+      }
+      
+      if (filterParams.createdAtMin && filterParams.createdAtMax) {
+        const start = new Date(filterParams.createdAtMin)
+        const end = new Date(filterParams.createdAtMax)
+        const diffDays = (end - start) / (1000 * 60 * 60 * 24)
+        return diffDays > 90 // More than 3 months
+      }
+    }
+    return false
+  }
+
+  const handleBatchComplete = (batchData) => {
+    setOrders(batchData)
+    setShowBatchProcessor(false)
+    setLastFetchInfo({
+      timestamp: new Date(),
+      count: batchData.length,
+      total: batchData.length,
+      filters: filters,
+      description: `Batch processed: ${orderService.formatFiltersDescription(filters)}`,
+      isBatch: true
+    })
+  }
+
+  const handleBatchCancel = () => {
+    setShowBatchProcessor(false)
   }
 
   return (
@@ -128,9 +177,51 @@ function App() {
             </div>
           )}
 
+          {/* Filters */}
+          <div className="flex-shrink-0">
+            <OrderFilters 
+              onFiltersChange={handleFiltersChange}
+              loading={loading}
+              currentFilters={filters}
+            />
+          </div>
+
+          {/* Last Fetch Info */}
+          {lastFetchInfo && (
+            <div className="flex-shrink-0 mb-4 bg-blue-50 border border-blue-200 rounded-md p-3">
+              <div className="flex items-start">
+                <div className="flex-shrink-0">
+                  <svg className="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div className="ml-3">
+                  <p className="text-sm text-blue-700">
+                    <strong>Last fetch:</strong> {lastFetchInfo.count} orders • {lastFetchInfo.description}
+                    {lastFetchInfo.isBatch && <span className="ml-2 px-2 py-0.5 bg-blue-200 text-blue-800 rounded-full text-xs">Batch Processed</span>}
+                  </p>
+                  <p className="text-xs text-blue-600 mt-1">
+                    Updated: {lastFetchInfo.timestamp.toLocaleString()}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Content Area */}
           <div className="flex-1 min-h-0 flex flex-col">
-            {orders.length > 0 ? (
+            {showBatchProcessor ? (
+              /* Batch Processing UI */
+              <div className="flex-1 flex items-center justify-center">
+                <div className="w-full max-w-2xl">
+                  <BatchProcessor 
+                    filters={filters}
+                    onComplete={handleBatchComplete}
+                    onCancel={handleBatchCancel}
+                  />
+                </div>
+              </div>
+            ) : orders.length > 0 ? (
               <>
                 {/* Dashboard Stats */}
                 <div className="flex-shrink-0 mb-6">
@@ -143,6 +234,8 @@ function App() {
                     data={orders} 
                     onExport={downloadCSV} 
                     loading={exportLoading}
+                    pagination={pagination}
+                    filters={filters}
                   />
                 </div>
               </>
