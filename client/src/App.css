@@ -1,0 +1,83 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom component classes */
+.btn {
+  @apply inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+.btn-primary {
+  @apply bg-shopify-600 text-white hover:bg-shopify-700 focus:ring-shopify-500;
+}
+
+.btn-secondary {
+  @apply bg-white text-gray-700 border-gray-300 hover:bg-gray-50 focus:ring-shopify-500;
+}
+
+.card {
+  @apply bg-white shadow-shopify rounded-lg border border-gray-200;
+}
+
+.table-header {
+  @apply px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50;
+}
+
+.table-cell {
+  @apply px-6 py-4 whitespace-nowrap text-sm text-gray-900;
+}
+
+.status-badge {
+  @apply inline-flex px-2 py-1 text-xs font-semibold rounded-full;
+}
+
+.status-paid {
+  @apply bg-green-100 text-green-800;
+}
+
+.status-pending {
+  @apply bg-yellow-100 text-yellow-800;
+}
+
+.status-fulfilled {
+  @apply bg-blue-100 text-blue-800;
+}
+
+.status-unfulfilled {
+  @apply bg-gray-100 text-gray-800;
+}
+
+/* Custom scrollbar for table horizontal scrolling */
+.table-scroll::-webkit-scrollbar {
+  height: 6px;
+}
+
+.table-scroll::-webkit-scrollbar-track {
+  background: #f8fafc;
+  border-radius: 3px;
+}
+
+.table-scroll::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+  border: 1px solid #f8fafc;
+}
+
+.table-scroll::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Table cell content optimization */
+.table-cell-content {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 250px;
+}
+
+/* Responsive table behavior */
+@media (max-width: 768px) {
+  .table-scroll {
+    -webkit-overflow-scrolling: touch;
+  }
+}

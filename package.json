@@ -1,0 +1,23 @@
+{
+  "name": "shopify-to-sheets",
+  "version": "1.0.0",
+  "description": "Full-stack Shopify to CSV export application",
+  "main": "server/index.js",
+  "scripts": {
+    "dev": "concurrently \"npm run server:dev\" \"npm run client:dev\"",
+    "server:dev": "cd server && npm run dev",
+    "client:dev": "cd client && npm run dev",
+    "build": "cd client && npm run build",
+    "start": "cd server && npm start",
+    "install:server": "cd server && npm install",
+    "install:client": "cd client && npm install",
+    "install:all": "npm run install:server && npm run install:client",
+    "heroku-postbuild": "npm run install:all && npm run build"
+  },
+  "keywords": ["shopify", "csv", "export", "react", "express"],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
