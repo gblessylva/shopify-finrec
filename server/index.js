@@ -197,6 +197,15 @@ app.get('/api/orders/csv', async (req, res) => {
     }
 });
 
+// Health check endpoint for monitoring
+app.get('/health', (req, res) => {
+    res.status(200).json({ 
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        version: '1.0.0'
+    });
+});
+
 // Catch all handler: send back React's index.html file for client-side routing
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, '../client/dist/index.html'));
