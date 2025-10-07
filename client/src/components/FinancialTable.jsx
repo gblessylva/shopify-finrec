@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import PropTypes from 'prop-types';
 
-const FinancialTable = ({ data, onExport, loading }) => {
+const FinancialTable = ({ data, onExport, loading, pagination, filters }) => {
   const [selectedRows, setSelectedRows] = useState(new Set());
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
@@ -398,17 +398,46 @@ const FinancialTable = ({ data, onExport, loading }) => {
       {/* Table Footer with Summary */}
       <div className="px-6 py-3 bg-gray-50 border-t border-gray-200">
         <div className="flex items-center justify-between text-sm text-gray-500">
-          <div>
-            Total Revenue: <span className="font-semibold text-gray-900">
-              {data.length > 0 ? data[0].currency : 'CAD'} {
-                data.reduce((sum, order) => sum + parseFloat(order.total), 0).toFixed(2)
-              }
-            </span>
+          <div className="flex items-center space-x-6">
+            <div>
+              Total Revenue: <span className="font-semibold text-gray-900">
+                {data.length > 0 ? data[0].currency : 'CAD'} {
+                  data.reduce((sum, order) => sum + parseFloat(order.total), 0).toFixed(2)
+                }
+              </span>
+            </div>
+            
+            {/* Pagination Info */}
+            {pagination && (
+              <div className="text-xs">
+                <span className="font-medium">Page Data:</span> {tableData.length} records
+                {pagination.hasNextPage && (
+                  <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-700 rounded-full">
+                    More available
+                  </span>
+                )}
+              </div>
+            )}
+            
+            {/* Filter Info */}
+            {filters?.all && (
+              <div className="text-xs">
+                <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full">
+                  All Records
+                </span>
+              </div>
+            )}
           </div>
-          <div>
+          
+          <div className="flex items-center space-x-4">
             {selectedRows.size > 0 && (
               <span>{selectedRows.size} record{selectedRows.size !== 1 ? 's' : ''} selected</span>
             )}
+            
+            {/* Enhanced Export Info */}
+            <div className="text-xs">
+              Showing {currentItems.length} of {tableData.length}
+            </div>
           </div>
         </div>
       </div>
@@ -439,7 +468,23 @@ FinancialTable.propTypes = {
     }))
   })).isRequired,
   onExport: PropTypes.func.isRequired,
-  loading: PropTypes.bool.isRequired
+  loading: PropTypes.bool.isRequired,
+  pagination: PropTypes.shape({
+    hasNextPage: PropTypes.bool,
+    endCursor: PropTypes.string,
+    currentPage: PropTypes.number,
+    totalFetched: PropTypes.number
+  }),
+  filters: PropTypes.shape({
+    all: PropTypes.bool,
+    limit: PropTypes.number,
+    createdAtMin: PropTypes.string,
+    createdAtMax: PropTypes.string,
+    financialStatus: PropTypes.string,
+    fulfillmentStatus: PropTypes.string,
+    sortKey: PropTypes.string,
+    reverse: PropTypes.bool
+  })
 };
 
 export default FinancialTable;
