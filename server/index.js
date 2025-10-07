@@ -30,6 +30,9 @@ function buildOrdersQuery(options = {}) {
         createdAtMax = null,
         financialStatus = null,
         fulfillmentStatus = null,
+        subBrand = null,
+        collection = null,
+        shippingLine = null,
         sortKey = 'CREATED_AT',
         reverse = true
     } = options;
@@ -134,6 +137,76 @@ function buildOrdersQuery(options = {}) {
     `;
 }
 
+// Apply product-level filters (post-processing since Shopify GraphQL doesn't support these directly)
+function applyProductLevelFilters(orders, filters = {}) {
+    const { subBrand, collection, shippingLine } = filters;
+    
+    if (!subBrand && !collection && !shippingLine) {
+        return orders; // No filters to apply
+    }
+    
+    return orders.filter(order => {
+        // Filter by sub_brand (check if any line item matches)
+        if (subBrand) {
+            const hasMatchingSubBrand = order.line_items.some(item => 
+                item.sub_brand && item.sub_brand.toLowerCase().includes(subBrand.toLowerCase())
+            );
+            if (!hasMatchingSubBrand) return false;
+        }
+        
+        // Filter by collection (check if any line item matches)
+        if (collection) {
+            const hasMatchingCollection = order.line_items.some(item =>
+                item.collection && item.collection.toLowerCase().includes(collection.toLowerCase())
+            );
+            if (!hasMatchingCollection) return false;
+        }
+        
+        // Filter by shipping line
+        if (shippingLine) {
+            if (!order.shipping_line || !order.shipping_line.title) return false;
+            const matchesShipping = order.shipping_line.title.toLowerCase().includes(shippingLine.toLowerCase());
+            if (!matchesShipping) return false;
+        }
+        
+        return true;
+    });
+}
+
+// Get unique values for filter dropdowns
+function getFilterOptions(orders) {
+    const subBrands = new Set();
+    const collections = new Set();
+    const shippingLines = new Set();
+    
+    orders.forEach(order => {
+        // Collect sub_brands
+        order.line_items.forEach(item => {
+            if (item.sub_brand && item.sub_brand !== "No Sub-Brand") {
+                subBrands.add(item.sub_brand);
+            }
+        });
+        
+        // Collect collections
+        order.line_items.forEach(item => {
+            if (item.collection && item.collection !== "No Collection") {
+                collections.add(item.collection);
+            }
+        });
+        
+        // Collect shipping lines
+        if (order.shipping_line && order.shipping_line.title) {
+            shippingLines.add(order.shipping_line.title);
+        }
+    });
+    
+    return {
+        subBrands: Array.from(subBrands).sort(),
+        collections: Array.from(collections).sort(),
+        shippingLines: Array.from(shippingLines).sort()
+    };
+}
+
 // API Routes
 async function fetchShopifyOrders(queryOptions = {}) {
     try {
@@ -159,38 +232,41 @@ async function fetchShopifyOrders(queryOptions = {}) {
             throw new Error(`GraphQL errors: ${JSON.stringify(data.errors)}`);
         }
 
-        const orders = data.data.orders.edges.map(o => ({
-        order_id: o.node.name,
-        created_at: o.node.createdAt,
-        financial_status: o.node.displayFinancialStatus,
-        fulfillment_status: o.node.displayFulfillmentStatus,
-        total: o.node.currentTotalPriceSet.shopMoney.amount,
-        currency: o.node.currentTotalPriceSet.shopMoney.currencyCode,
-        customer_name: `${o.node.customer?.firstName || ""} ${o.node.customer?.lastName || ""}`.trim(),
-        customer_email: o.node.customer?.email || "",
-        customer_address: o.node.customer?.defaultAddress
-            ? `${o.node.customer.defaultAddress.address1}, ${o.node.customer.defaultAddress.city}, ${o.node.customer.defaultAddress.country}`
-            : "",
-        shipping_address: o.node.shippingAddress
-            ? `${o.node.shippingAddress.address1}, ${o.node.shippingAddress.city}, ${o.node.shippingAddress.country}`
-            : "",
-        billing_address: o.node.billingAddress
-            ? `${o.node.billingAddress.address1}, ${o.node.billingAddress.city}, ${o.node.billingAddress.country}`
-            : "",
-        shipping_line: o.node.shippingLine
-            ? {
-                title: o.node.shippingLine.title,
-                price: o.node.shippingLine.originalPriceSet.shopMoney.amount,
-                currency: o.node.shippingLine.originalPriceSet.shopMoney.currencyCode
-            }
-            : null,
-        line_items: o.node.lineItems.edges.map(li => ({
-            title: li.node.title,
-            quantity: li.node.quantity,
-            sub_brand: li.node.product?.metafield?.value || "No Sub-Brand",
-            collection: li.node.product?.collections?.edges[0]?.node?.title || "No Collection"
-        }))
-    }));
+        let orders = data.data.orders.edges.map(o => ({
+            order_id: o.node.name,
+            created_at: o.node.createdAt,
+            financial_status: o.node.displayFinancialStatus,
+            fulfillment_status: o.node.displayFulfillmentStatus,
+            total: o.node.currentTotalPriceSet.shopMoney.amount,
+            currency: o.node.currentTotalPriceSet.shopMoney.currencyCode,
+            customer_name: `${o.node.customer?.firstName || ""} ${o.node.customer?.lastName || ""}`.trim(),
+            customer_email: o.node.customer?.email || "",
+            customer_address: o.node.customer?.defaultAddress
+                ? `${o.node.customer.defaultAddress.address1}, ${o.node.customer.defaultAddress.city}, ${o.node.customer.defaultAddress.country}`
+                : "",
+            shipping_address: o.node.shippingAddress
+                ? `${o.node.shippingAddress.address1}, ${o.node.shippingAddress.city}, ${o.node.shippingAddress.country}`
+                : "",
+            billing_address: o.node.billingAddress
+                ? `${o.node.billingAddress.address1}, ${o.node.billingAddress.city}, ${o.node.billingAddress.country}`
+                : "",
+            shipping_line: o.node.shippingLine
+                ? {
+                    title: o.node.shippingLine.title,
+                    price: o.node.shippingLine.originalPriceSet.shopMoney.amount,
+                    currency: o.node.shippingLine.originalPriceSet.shopMoney.currencyCode
+                }
+                : null,
+            line_items: o.node.lineItems.edges.map(li => ({
+                title: li.node.title,
+                quantity: li.node.quantity,
+                sub_brand: li.node.product?.metafield?.value || "No Sub-Brand",
+                collection: li.node.product?.collections?.edges[0]?.node?.title || "No Collection"
+            }))
+        }));
+
+        // Apply post-processing filters for product-level attributes
+        orders = applyProductLevelFilters(orders, queryOptions);
 
         return {
             orders,
@@ -277,6 +353,9 @@ app.get('/api/orders', async (req, res) => {
             createdAtMax,
             financialStatus,
             fulfillmentStatus,
+            subBrand,
+            collection,
+            shippingLine,
             sortKey = 'CREATED_AT',
             reverse = 'true'
         } = req.query;
@@ -287,6 +366,9 @@ app.get('/api/orders', async (req, res) => {
             createdAtMax,
             financialStatus,
             fulfillmentStatus,
+            subBrand,
+            collection,
+            shippingLine,
             sortKey,
             reverse: reverse === 'true'
         };
@@ -333,6 +415,9 @@ app.get('/api/orders/csv', async (req, res) => {
             createdAtMax,
             financialStatus,
             fulfillmentStatus,
+            subBrand,
+            collection,
+            shippingLine,
             sortKey = 'CREATED_AT',
             reverse = 'true'
         } = req.query;
@@ -342,6 +427,9 @@ app.get('/api/orders/csv', async (req, res) => {
             createdAtMax,
             financialStatus,
             fulfillmentStatus,
+            subBrand,
+            collection,
+            shippingLine,
             sortKey,
             reverse: reverse === 'true'
         };
@@ -366,6 +454,35 @@ app.get('/api/orders/csv', async (req, res) => {
         res.send(csv);
     } catch (error) {
         console.error('Error generating CSV:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Get filter options endpoint
+app.get('/api/filter-options', async (req, res) => {
+    try {
+        // Fetch a sample of recent orders to get available filter options
+        const result = await fetchShopifyOrders({ 
+            first: 250, // Get more orders for better filter options
+            reverse: true,
+            sortKey: 'CREATED_AT'
+        });
+        
+        const options = getFilterOptions(result.orders);
+        
+        res.json({
+            success: true,
+            data: {
+                subBrands: options.subBrands,
+                collections: options.collections,
+                shippingLines: options.shippingLines,
+                financialStatus: ["pending", "authorized", "partially_paid", "paid", "partially_refunded", "refunded", "voided"],
+                fulfillmentStatus: ["unfulfilled", "partial", "fulfilled", "restocked"]
+            },
+            message: `Found ${options.subBrands.length} sub-brands, ${options.collections.length} collections, ${options.shippingLines.length} shipping methods`
+        });
+    } catch (error) {
+        console.error('Error fetching filter options:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
@@ -421,13 +538,29 @@ app.get('/api/docs', (req, res) => {
                         type: "boolean",
                         default: true,
                         description: "Sort in descending order"
+                    },
+                    subBrand: {
+                        type: "string",
+                        description: "Filter by product sub-brand (partial match)"
+                    },
+                    collection: {
+                        type: "string", 
+                        description: "Filter by product collection (partial match)"
+                    },
+                    shippingLine: {
+                        type: "string",
+                        description: "Filter by shipping method (partial match)"
                     }
                 },
                 examples: {
                     "Recent orders": "/api/orders?limit=25",
                     "All paid orders": "/api/orders?all=true&financialStatus=paid", 
                     "Orders from date range": "/api/orders?createdAtMin=2024-01-01T00:00:00Z&createdAtMax=2024-01-31T23:59:59Z",
-                    "Unfulfilled orders": "/api/orders?fulfillmentStatus=unfulfilled&limit=100"
+                    "Unfulfilled orders": "/api/orders?fulfillmentStatus=unfulfilled&limit=100",
+                    "Filter by sub-brand": "/api/orders?subBrand=Premium&limit=50",
+                    "Filter by collection": "/api/orders?collection=Summer&limit=50",
+                    "Filter by shipping": "/api/orders?shippingLine=Standard&limit=50",
+                    "Combined filters": "/api/orders?subBrand=Premium&collection=Summer&financialStatus=paid"
                 }
             },
             "/api/orders/csv": {
@@ -435,6 +568,18 @@ app.get('/api/docs', (req, res) => {
                 description: "Export orders as CSV file",
                 parameters: "Same as /api/orders (defaults to all=true)",
                 note: "Downloads CSV file directly"
+            },
+            "/api/filter-options": {
+                method: "GET",
+                description: "Get available filter options from recent orders",
+                returns: {
+                    subBrands: "Array of available sub-brand values",
+                    collections: "Array of available collection names",
+                    shippingLines: "Array of available shipping methods",
+                    financialStatus: "Array of financial status options",
+                    fulfillmentStatus: "Array of fulfillment status options"
+                },
+                note: "Analyzes recent orders to provide dynamic filter options"
             }
         },
         limits: {

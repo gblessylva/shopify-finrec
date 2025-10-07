@@ -203,6 +203,15 @@ class OrderService {
     if (filters.fulfillmentStatus) {
       suffix += `-${filters.fulfillmentStatus}`
     }
+    if (filters.subBrand) {
+      suffix += `-brand_${filters.subBrand.replace(/\s+/g, '_')}`
+    }
+    if (filters.collection) {
+      suffix += `-collection_${filters.collection.replace(/\s+/g, '_')}`
+    }
+    if (filters.shippingLine) {
+      suffix += `-shipping_${filters.shippingLine.replace(/\s+/g, '_')}`
+    }
     if (filters.createdAtMin && filters.createdAtMax) {
       const startDate = new Date(filters.createdAtMin).toISOString().split('T')[0]
       const endDate = new Date(filters.createdAtMax).toISOString().split('T')[0]
@@ -270,6 +279,18 @@ class OrderService {
     
     if (filters.fulfillmentStatus) {
       parts.push(`${filters.fulfillmentStatus} orders`)
+    }
+    
+    if (filters.subBrand) {
+      parts.push(`sub-brand: ${filters.subBrand}`)
+    }
+    
+    if (filters.collection) {
+      parts.push(`collection: ${filters.collection}`)
+    }
+    
+    if (filters.shippingLine) {
+      parts.push(`shipping: ${filters.shippingLine}`)
     }
     
     if (filters.createdAtMin && filters.createdAtMax) {

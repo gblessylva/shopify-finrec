@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 const OrderFilters = ({ onFiltersChange, loading, currentFilters = {} }) => {
   const [filters, setFilters] = useState({
@@ -8,12 +8,47 @@ const OrderFilters = ({ onFiltersChange, loading, currentFilters = {} }) => {
     createdAtMax: '',
     financialStatus: '',
     fulfillmentStatus: '',
+    subBrand: '',
+    collection: '',
+    shippingLine: '',
     sortKey: 'CREATED_AT',
     reverse: true,
     ...currentFilters
   })
+  
+  const [filterOptions, setFilterOptions] = useState({
+    subBrands: [],
+    collections: [],
+    shippingLines: [],
+    financialStatus: [],
+    fulfillmentStatus: []
+  })
+  
+  const [loadingOptions, setLoadingOptions] = useState(false)
 
   const [showAdvanced, setShowAdvanced] = useState(false)
+
+  // Fetch filter options on component mount
+  useEffect(() => {
+    const fetchFilterOptions = async () => {
+      setLoadingOptions(true)
+      try {
+        const response = await fetch('/api/filter-options')
+        if (response.ok) {
+          const data = await response.json()
+          if (data.success) {
+            setFilterOptions(data.data)
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch filter options:', error)
+      } finally {
+        setLoadingOptions(false)
+      }
+    }
+
+    fetchFilterOptions()
+  }, [])
 
   // Predefined date ranges
   const dateRanges = {
@@ -57,21 +92,42 @@ const OrderFilters = ({ onFiltersChange, loading, currentFilters = {} }) => {
 
   const financialStatusOptions = [
     { value: '', label: 'All Financial Status' },
-    { value: 'pending', label: 'Pending' },
-    { value: 'authorized', label: 'Authorized' },
-    { value: 'partially_paid', label: 'Partially Paid' },
-    { value: 'paid', label: 'Paid' },
-    { value: 'partially_refunded', label: 'Partially Refunded' },
-    { value: 'refunded', label: 'Refunded' },
-    { value: 'voided', label: 'Voided' }
+    ...(filterOptions.financialStatus || []).map(status => ({
+      value: status,
+      label: status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, ' ')
+    }))
   ]
 
   const fulfillmentStatusOptions = [
     { value: '', label: 'All Fulfillment Status' },
-    { value: 'unfulfilled', label: 'Unfulfilled' },
-    { value: 'partial', label: 'Partially Fulfilled' },
-    { value: 'fulfilled', label: 'Fulfilled' },
-    { value: 'restocked', label: 'Restocked' }
+    ...(filterOptions.fulfillmentStatus || []).map(status => ({
+      value: status,
+      label: status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, ' ')
+    }))
+  ]
+
+  const subBrandOptions = [
+    { value: '', label: 'All Sub-Brands' },
+    ...(filterOptions.subBrands || []).map(brand => ({
+      value: brand,
+      label: brand
+    }))
+  ]
+
+  const collectionOptions = [
+    { value: '', label: 'All Collections' },
+    ...(filterOptions.collections || []).map(collection => ({
+      value: collection,
+      label: collection
+    }))
+  ]
+
+  const shippingLineOptions = [
+    { value: '', label: 'All Shipping Methods' },
+    ...(filterOptions.shippingLines || []).map(shipping => ({
+      value: shipping,
+      label: shipping
+    }))
   ]
 
   const sortOptions = [
@@ -106,6 +162,9 @@ const OrderFilters = ({ onFiltersChange, loading, currentFilters = {} }) => {
       createdAtMax: '',
       financialStatus: '',
       fulfillmentStatus: '',
+      subBrand: '',
+      collection: '',
+      shippingLine: '',
       sortKey: 'CREATED_AT',
       reverse: true
     }
@@ -239,6 +298,63 @@ const OrderFilters = ({ onFiltersChange, loading, currentFilters = {} }) => {
             className="w-full rounded-md border-gray-300 shadow-sm focus:border-shopify-500 focus:ring-shopify-500 text-sm"
           >
             {fulfillmentStatusOptions.map(option => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Product & Shipping Filters */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+        {/* Sub-Brand Filter */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Sub-Brand
+            {loadingOptions && <span className="text-xs text-gray-400 ml-1">(loading...)</span>}
+          </label>
+          <select
+            value={filters.subBrand}
+            onChange={(e) => handleFilterChange('subBrand', e.target.value)}
+            disabled={loadingOptions}
+            className="w-full rounded-md border-gray-300 shadow-sm focus:border-shopify-500 focus:ring-shopify-500 text-sm disabled:bg-gray-100"
+          >
+            {subBrandOptions.map(option => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Collection Filter */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Collection
+            {loadingOptions && <span className="text-xs text-gray-400 ml-1">(loading...)</span>}
+          </label>
+          <select
+            value={filters.collection}
+            onChange={(e) => handleFilterChange('collection', e.target.value)}
+            disabled={loadingOptions}
+            className="w-full rounded-md border-gray-300 shadow-sm focus:border-shopify-500 focus:ring-shopify-500 text-sm disabled:bg-gray-100"
+          >
+            {collectionOptions.map(option => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Shipping Method Filter */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Shipping Method
+            {loadingOptions && <span className="text-xs text-gray-400 ml-1">(loading...)</span>}
+          </label>
+          <select
+            value={filters.shippingLine}
+            onChange={(e) => handleFilterChange('shippingLine', e.target.value)}
+            disabled={loadingOptions}
+            className="w-full rounded-md border-gray-300 shadow-sm focus:border-shopify-500 focus:ring-shopify-500 text-sm disabled:bg-gray-100"
+          >
+            {shippingLineOptions.map(option => (
               <option key={option.value} value={option.value}>{option.label}</option>
             ))}
           </select>
