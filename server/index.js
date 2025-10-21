@@ -33,6 +33,7 @@ function buildOrdersQuery(options = {}) {
         subBrand = null,
         collection = null,
         shippingLine = null,
+        customerSubBrand = null,
         sortKey = 'CREATED_AT',
         reverse = true
     } = options;
@@ -115,6 +116,10 @@ function buildOrdersQuery(options = {}) {
                 node {
                   title
                   quantity
+                  customAttributes {
+                    key
+                    value
+                  }
                   product {
                     collections(first: 1) {
                       edges {
@@ -124,6 +129,9 @@ function buildOrdersQuery(options = {}) {
                       }
                     }
                     metafield(namespace: "custom", key: "sub_brand") {
+                      value
+                    }
+                    customerSubBrandMetafield: metafield(namespace: "custom", key: "customer_sub_brand") {
                       value
                     }
                   }
@@ -139,9 +147,9 @@ function buildOrdersQuery(options = {}) {
 
 // Apply product-level filters (post-processing since Shopify GraphQL doesn't support these directly)
 function applyProductLevelFilters(orders, filters = {}) {
-    const { subBrand, collection, shippingLine } = filters;
+    const { subBrand, collection, shippingLine, customerSubBrand } = filters;
     
-    if (!subBrand && !collection && !shippingLine) {
+    if (!subBrand && !collection && !shippingLine && !customerSubBrand) {
         return orders; // No filters to apply
     }
     
@@ -149,7 +157,7 @@ function applyProductLevelFilters(orders, filters = {}) {
         // Filter by sub_brand (check if any line item matches)
         if (subBrand) {
             const hasMatchingSubBrand = order.line_items.some(item => 
-                item.sub_brand && item.sub_brand.toLowerCase().includes(subBrand.toLowerCase())
+                item.sub_brand && item.sub_brand.toLowerCase() === subBrand.toLowerCase()
             );
             if (!hasMatchingSubBrand) return false;
         }
@@ -162,7 +170,24 @@ function applyProductLevelFilters(orders, filters = {}) {
             if (!hasMatchingCollection) return false;
         }
         
-        // Filter by shipping line
+        // Filter by customer sub_brand (ONLY match exact customer selections, ignore JSON arrays)
+        if (customerSubBrand) {
+            const hasMatchingCustomerSubBrand = order.line_items.some(item => {
+                if (!item.customer_sub_brand || item.customer_sub_brand === "No Customer Sub-Brand") {
+                    return false;
+                }
+                
+                // Skip JSON arrays completely - we only want actual customer selections
+                try {
+                    JSON.parse(item.customer_sub_brand);
+                    return false; // This is a JSON array, ignore it completely
+                } catch (e) {
+                    // This is an actual customer selection, check for exact match
+                    return item.customer_sub_brand.toLowerCase() === customerSubBrand.toLowerCase();
+                }
+            });
+            if (!hasMatchingCustomerSubBrand) return false;
+        }        // Filter by shipping line
         if (shippingLine) {
             if (!order.shipping_line || !order.shipping_line.title) return false;
             const matchesShipping = order.shipping_line.title.toLowerCase().includes(shippingLine.toLowerCase());
@@ -178,6 +203,7 @@ function getFilterOptions(orders) {
     const subBrands = new Set();
     const collections = new Set();
     const shippingLines = new Set();
+    const customerSubBrands = new Set();
     
     orders.forEach(order => {
         // Collect sub_brands
@@ -194,6 +220,29 @@ function getFilterOptions(orders) {
             }
         });
         
+        // Collect customer sub_brands - prioritize actual customer selections
+        order.line_items.forEach(item => {
+            if (item.customer_sub_brand && item.customer_sub_brand !== "No Customer Sub-Brand") {
+                // First check if it's a direct customer selection (not a JSON array)
+                try {
+                    const parsed = JSON.parse(item.customer_sub_brand);
+                    if (Array.isArray(parsed)) {
+                        // If it's still a JSON array, extract all options for filter dropdown
+                        parsed.forEach(brand => {
+                            if (brand && typeof brand === 'string') {
+                                customerSubBrands.add(brand);
+                            }
+                        });
+                    } else if (typeof parsed === 'string') {
+                        customerSubBrands.add(parsed);
+                    }
+                } catch (e) {
+                    // Not JSON - this is the actual customer selection, add it directly
+                    customerSubBrands.add(item.customer_sub_brand);
+                }
+            }
+                });
+        
         // Collect shipping lines
         if (order.shipping_line && order.shipping_line.title) {
             shippingLines.add(order.shipping_line.title);
@@ -203,7 +252,8 @@ function getFilterOptions(orders) {
     return {
         subBrands: Array.from(subBrands).sort(),
         collections: Array.from(collections).sort(),
-        shippingLines: Array.from(shippingLines).sort()
+        shippingLines: Array.from(shippingLines).sort(),
+        customerSubBrands: Array.from(customerSubBrands).sort()
     };
 }
 
@@ -257,12 +307,52 @@ async function fetchShopifyOrders(queryOptions = {}) {
                     currency: o.node.shippingLine.originalPriceSet.shopMoney.currencyCode
                 }
                 : null,
-            line_items: o.node.lineItems.edges.map(li => ({
-                title: li.node.title,
-                quantity: li.node.quantity,
-                sub_brand: li.node.product?.metafield?.value || "No Sub-Brand",
-                collection: li.node.product?.collections?.edges[0]?.node?.title || "No Collection"
-            }))
+            line_items: o.node.lineItems.edges.map(li => {
+                // Extract customer's actual selection from line item properties
+                let customerSubBrandSelection = "No Customer Sub-Brand";
+                
+                // Look for customer sub-brand in line item custom attributes (properties)
+                if (li.node.customAttributes) {
+                    const customerSubBrandAttr = li.node.customAttributes.find(attr => 
+                        attr.key && (
+                            attr.key === 'Sub Brand' ||
+                            attr.key === 'Customer Sub-Brand' ||
+                            attr.key === 'customer-sub-brand' ||
+                            attr.key === 'sub-brand' ||
+                            attr.key.toLowerCase().includes('sub') && attr.key.toLowerCase().includes('brand')
+                        )
+                    );
+                    
+                    if (customerSubBrandAttr && customerSubBrandAttr.value) {
+                        customerSubBrandSelection = customerSubBrandAttr.value;
+                    } else {
+                        // Fallback: If no line item property, try to extract from product metafield
+                        // This is for backwards compatibility with existing orders
+                        const metafieldValue = li.node.product?.customerSubBrandMetafield?.value;
+                        if (metafieldValue && metafieldValue !== "No Customer Sub-Brand") {
+                            try {
+                                const parsed = JSON.parse(metafieldValue);
+                                if (Array.isArray(parsed) && parsed.length > 0) {
+                                    // If it's an array, we can't determine the selection, so keep as fallback
+                                    customerSubBrandSelection = metafieldValue;
+                                } else if (typeof parsed === 'string') {
+                                    customerSubBrandSelection = parsed;
+                                }
+                            } catch (e) {
+                                customerSubBrandSelection = metafieldValue;
+                            }
+                        }
+                    }
+                }
+                
+                return {
+                    title: li.node.title,
+                    quantity: li.node.quantity,
+                    sub_brand: li.node.product?.metafield?.value || "No Sub-Brand",
+                    customer_sub_brand: customerSubBrandSelection,
+                    collection: li.node.product?.collections?.edges[0]?.node?.title || "No Collection"
+                };
+            })
         }));
 
         // Apply post-processing filters for product-level attributes
@@ -334,7 +424,24 @@ function generateCSV(data) {
             product_title: item.title,
             product_quantity: item.quantity,
             product_collection: item.collection,
-            product_sub_brand: item.sub_brand
+            product_sub_brand: item.sub_brand,
+            product_customer_sub_brand: (() => {
+                // Handle customer sub-brand field - prioritize actual selection over JSON array
+                if (item.customer_sub_brand && item.customer_sub_brand !== "No Customer Sub-Brand") {
+                    try {
+                        const parsed = JSON.parse(item.customer_sub_brand);
+                        if (Array.isArray(parsed)) {
+                            // If still a JSON array, convert to comma-separated for CSV
+                            return parsed.join(', ');
+                        }
+                        return parsed;
+                    } catch (e) {
+                        // Not JSON - this is the actual customer selection
+                        return item.customer_sub_brand;
+                    }
+                }
+                return item.customer_sub_brand;
+            })()
         }))
     );
 
@@ -356,6 +463,7 @@ app.get('/api/orders', async (req, res) => {
             subBrand,
             collection,
             shippingLine,
+            customerSubBrand,
             sortKey = 'CREATED_AT',
             reverse = 'true'
         } = req.query;
@@ -369,6 +477,7 @@ app.get('/api/orders', async (req, res) => {
             subBrand,
             collection,
             shippingLine,
+            customerSubBrand,
             sortKey,
             reverse: reverse === 'true'
         };
@@ -418,6 +527,7 @@ app.get('/api/orders/csv', async (req, res) => {
             subBrand,
             collection,
             shippingLine,
+            customerSubBrand,
             sortKey = 'CREATED_AT',
             reverse = 'true'
         } = req.query;
@@ -430,6 +540,7 @@ app.get('/api/orders/csv', async (req, res) => {
             subBrand,
             collection,
             shippingLine,
+            customerSubBrand,
             sortKey,
             reverse: reverse === 'true'
         };
@@ -476,10 +587,11 @@ app.get('/api/filter-options', async (req, res) => {
                 subBrands: options.subBrands,
                 collections: options.collections,
                 shippingLines: options.shippingLines,
+                customerSubBrands: options.customerSubBrands,
                 financialStatus: ["pending", "authorized", "partially_paid", "paid", "partially_refunded", "refunded", "voided"],
                 fulfillmentStatus: ["unfulfilled", "partial", "fulfilled", "restocked"]
             },
-            message: `Found ${options.subBrands.length} sub-brands, ${options.collections.length} collections, ${options.shippingLines.length} shipping methods`
+            message: `Found ${options.subBrands.length} sub-brands, ${options.collections.length} collections, ${options.shippingLines.length} shipping methods, ${options.customerSubBrands.length} customer sub-brands`
         });
     } catch (error) {
         console.error('Error fetching filter options:', error);
@@ -550,6 +662,10 @@ app.get('/api/docs', (req, res) => {
                     shippingLine: {
                         type: "string",
                         description: "Filter by shipping method (partial match)"
+                    },
+                    customerSubBrand: {
+                        type: "string",
+                        description: "Filter by customer sub-brand (partial match)"
                     }
                 },
                 examples: {
@@ -560,7 +676,8 @@ app.get('/api/docs', (req, res) => {
                     "Filter by sub-brand": "/api/orders?subBrand=Premium&limit=50",
                     "Filter by collection": "/api/orders?collection=Summer&limit=50",
                     "Filter by shipping": "/api/orders?shippingLine=Standard&limit=50",
-                    "Combined filters": "/api/orders?subBrand=Premium&collection=Summer&financialStatus=paid"
+                    "Filter by customer sub-brand": "/api/orders?customerSubBrand=VIP&limit=50",
+                    "Combined filters": "/api/orders?subBrand=Premium&collection=Summer&customerSubBrand=VIP&financialStatus=paid"
                 }
             },
             "/api/orders/csv": {
@@ -576,6 +693,7 @@ app.get('/api/docs', (req, res) => {
                     subBrands: "Array of available sub-brand values",
                     collections: "Array of available collection names",
                     shippingLines: "Array of available shipping methods",
+                    customerSubBrands: "Array of available customer sub-brand values",
                     financialStatus: "Array of financial status options",
                     fulfillmentStatus: "Array of fulfillment status options"
                 },
@@ -697,6 +815,117 @@ app.get('/health', (req, res) => {
         timestamp: new Date().toISOString(),
         version: '1.0.0'
     });
+});
+
+// Debug endpoint to check line item custom attributes for recent orders
+app.get('/api/debug/recent-properties', async (req, res) => {
+    try {
+        const query = `
+        {
+          orders(first: 5, sortKey: CREATED_AT, reverse: true) {
+            edges {
+              node {
+                id
+                name
+                createdAt
+                lineItems(first: 5) {
+                  edges {
+                    node {
+                      title
+                      customAttributes {
+                        key
+                        value
+                      }
+                      product {
+                        customerSubBrandMetafield: metafield(namespace: "custom", key: "customer_sub_brand") {
+                          value
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        `;
+        
+        const response = await fetch(SHOPIFY_URL, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-Shopify-Access-Token": API_KEY
+            },
+            body: JSON.stringify({ query })
+        });
+        
+        const data = await response.json();
+        
+        // Process and show what properties are available
+        const processedOrders = data.data.orders.edges.map(order => ({
+            order_id: order.node.name,
+            created_at: order.node.createdAt,
+            line_items: order.node.lineItems.edges.map(li => ({
+                title: li.node.title,
+                custom_attributes: li.node.customAttributes,
+                metafield_value: li.node.product?.customerSubBrandMetafield?.value
+            }))
+        }));
+        
+        res.json({
+            success: true,
+            message: "Recent orders with line item properties",
+            data: processedOrders
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Debug endpoint to check line item custom attributes
+app.get('/api/debug/order/:orderId', async (req, res) => {
+    try {
+        const { orderId } = req.params;
+        
+        const query = `
+        {
+          order(id: "gid://shopify/Order/${orderId}") {
+            id
+            name
+            lineItems(first: 10) {
+              edges {
+                node {
+                  title
+                  customAttributes {
+                    key
+                    value
+                  }
+                  product {
+                    customerSubBrandMetafield: metafield(namespace: "custom", key: "customer_sub_brand") {
+                      value
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        `;
+        
+        const response = await fetch(SHOPIFY_URL, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-Shopify-Access-Token": API_KEY
+            },
+            body: JSON.stringify({ query })
+        });
+        
+        const data = await response.json();
+        res.json(data);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
 });
 
 // Catch all handler: send back React's index.html file for client-side routing

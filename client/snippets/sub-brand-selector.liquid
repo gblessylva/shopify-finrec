@@ -1,0 +1,73 @@
+{% assign ai_gen_id = block.id | remove: 'shopify://' | remove: 'section_blocks/' | replace: '-', '_' %}
+
+<div class="product__sub-brand-selector" {{ block.shopify_attributes }}>
+  <div class="ai-sub-brand-selector__container-{{ ai_gen_id }}">
+    {% if block.settings.heading != blank %}
+      <h3 class="ai-sub-brand-selector__heading-{{ ai_gen_id }}">{{ block.settings.heading }}</h3>
+    {% endif %}
+    
+    {% if block.settings.description != blank %}
+      <p class="ai-sub-brand-selector__description-{{ ai_gen_id }}">{{ block.settings.description }}</p>
+    {% endif %}
+    
+    {% if product.metafields.custom.customer_sub_brand.value != blank %}
+      <div class="ai-sub-brand-selector__field-wrapper-{{ ai_gen_id }}">
+        <label for="sub-brand-select-{{ ai_gen_id }}" class="sr-only">Select sub-brand</label>
+        <select
+          class="ai-sub-brand-selector__select-{{ ai_gen_id }}"
+          id="sub-brand-select-{{ ai_gen_id }}"
+          name="properties[Customer Sub-Brand]"
+          aria-required="true"
+          aria-describedby="sub-brand-error-{{ ai_gen_id }}"
+        >
+          <option value="">{{ block.settings.placeholder_text }}</option>
+          {% for brand in product.metafields.custom.customer_sub_brand.value %}
+            {% assign trimmed_brand = brand | strip %}
+            {% if trimmed_brand != blank %}
+              <option value="{{ trimmed_brand }}">{{ trimmed_brand }}</option>
+            {% endif %}
+          {% endfor %}
+        </select>
+      </div>
+
+      <div
+        class="ai-sub-brand-selector__error-{{ ai_gen_id }}"
+        id="sub-brand-error-{{ ai_gen_id }}"
+        role="alert"
+        style="display:none; color:red;"
+      >
+        {{ block.settings.error_message }}
+      </div>
+    {% else %}
+      <div class="ai-sub-brand-selector__empty-state-{{ ai_gen_id }}">
+        ⚠️ Add values to the metafield <strong>custom.customer_sub_brand</strong> in Shopify Admin.
+      </div>
+    {% endif %}
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const container = document.querySelector('.product__sub-brand-selector');
+      const select = container?.querySelector('#sub-brand-select-{{ ai_gen_id }}');
+      const errorDiv = container?.querySelector('#sub-brand-error-{{ ai_gen_id }}');
+      const form = container?.closest('form[action*="/cart"]');
+
+      if (select && form) {
+        form.addEventListener('submit', function(e) {
+          if (!select.value) {
+            e.preventDefault();
+            errorDiv.style.display = 'block';
+            select.focus();
+            select.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          } else {
+            errorDiv.style.display = 'none';
+          }
+        });
+
+        select.addEventListener('change', function() {
+          if (this.value) errorDiv.style.display = 'none';
+        });
+      }
+    });
+  </script>
+</div>

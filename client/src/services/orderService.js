@@ -212,6 +212,9 @@ class OrderService {
     if (filters.shippingLine) {
       suffix += `-shipping_${filters.shippingLine.replace(/\s+/g, '_')}`
     }
+    if (filters.customerSubBrand) {
+      suffix += `-customer_brand_${filters.customerSubBrand.replace(/\s+/g, '_')}`
+    }
     if (filters.createdAtMin && filters.createdAtMax) {
       const startDate = new Date(filters.createdAtMin).toISOString().split('T')[0]
       const endDate = new Date(filters.createdAtMax).toISOString().split('T')[0]
@@ -291,6 +294,10 @@ class OrderService {
     
     if (filters.shippingLine) {
       parts.push(`shipping: ${filters.shippingLine}`)
+    }
+    
+    if (filters.customerSubBrand) {
+      parts.push(`customer sub-brand: ${filters.customerSubBrand}`)
     }
     
     if (filters.createdAtMin && filters.createdAtMax) {
