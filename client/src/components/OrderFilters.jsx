@@ -11,6 +11,7 @@ const OrderFilters = ({ onFiltersChange, loading, currentFilters = {} }) => {
     subBrand: '',
     collection: '',
     shippingLine: '',
+    customerSubBrand: '',
     sortKey: 'CREATED_AT',
     reverse: true,
     ...currentFilters
@@ -20,6 +21,7 @@ const OrderFilters = ({ onFiltersChange, loading, currentFilters = {} }) => {
     subBrands: [],
     collections: [],
     shippingLines: [],
+    customerSubBrands: [],
     financialStatus: [],
     fulfillmentStatus: []
   })
@@ -130,6 +132,14 @@ const OrderFilters = ({ onFiltersChange, loading, currentFilters = {} }) => {
     }))
   ]
 
+  const customerSubBrandOptions = [
+    { value: '', label: 'All Customer Sub-Brands' },
+    ...(filterOptions.customerSubBrands || []).map(brand => ({
+      value: brand,
+      label: brand
+    }))
+  ]
+
   const sortOptions = [
     { value: 'CREATED_AT', label: 'Created Date' },
     { value: 'UPDATED_AT', label: 'Updated Date' },
@@ -165,6 +175,7 @@ const OrderFilters = ({ onFiltersChange, loading, currentFilters = {} }) => {
       subBrand: '',
       collection: '',
       shippingLine: '',
+      customerSubBrand: '',
       sortKey: 'CREATED_AT',
       reverse: true
     }
@@ -305,7 +316,7 @@ const OrderFilters = ({ onFiltersChange, loading, currentFilters = {} }) => {
       </div>
 
       {/* Product & Shipping Filters */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
         {/* Sub-Brand Filter */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -355,6 +366,24 @@ const OrderFilters = ({ onFiltersChange, loading, currentFilters = {} }) => {
             className="w-full rounded-md border-gray-300 shadow-sm focus:border-shopify-500 focus:ring-shopify-500 text-sm disabled:bg-gray-100"
           >
             {shippingLineOptions.map(option => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Customer Sub-Brand Filter */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Customer Sub-Brand
+            {loadingOptions && <span className="text-xs text-gray-400 ml-1">(loading...)</span>}
+          </label>
+          <select
+            value={filters.customerSubBrand}
+            onChange={(e) => handleFilterChange('customerSubBrand', e.target.value)}
+            disabled={loadingOptions}
+            className="w-full rounded-md border-gray-300 shadow-sm focus:border-shopify-500 focus:ring-shopify-500 text-sm disabled:bg-gray-100"
+          >
+            {customerSubBrandOptions.map(option => (
               <option key={option.value} value={option.value}>{option.label}</option>
             ))}
           </select>

@@ -7,7 +7,7 @@ const FinancialTable = ({ data, onExport, loading, pagination, filters }) => {
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [visibleColumns, setVisibleColumns] = useState(new Set([
     'order_id', 'created_at', 'customer_name', 'product_title', 
-    'product_quantity', 'total', 'financial_status', 'fulfillment_status'
+    'product_quantity', 'product_customer_sub_brand', 'total', 'financial_status', 'fulfillment_status'
   ]));
 
   // Define all available columns
@@ -22,6 +22,7 @@ const FinancialTable = ({ data, onExport, loading, pagination, filters }) => {
     { key: 'product_quantity', label: 'Qty', width: 'min-w-[60px]' },
     { key: 'product_collection', label: 'Collection', width: 'min-w-[120px]' },
     { key: 'product_sub_brand', label: 'Sub Brand', width: 'min-w-[120px]' },
+    { key: 'product_customer_sub_brand', label: 'Customer Sub Brand', width: 'min-w-[150px]' },
     { key: 'total', label: 'Total', width: 'min-w-[100px]' },
     { key: 'financial_status', label: 'Payment', width: 'min-w-[110px]' },
     { key: 'fulfillment_status', label: 'Fulfillment', width: 'min-w-[110px]' },
@@ -60,6 +61,7 @@ const FinancialTable = ({ data, onExport, loading, pagination, filters }) => {
       product_quantity: item.quantity,
       product_collection: item.collection || 'N/A',
       product_sub_brand: item.sub_brand || 'N/A',
+      product_customer_sub_brand: item.customer_sub_brand || 'No Customer Sub-Brand',
       shipping_line_title: order.shipping_line ? order.shipping_line.title : 'N/A',
       shipping_line_price: order.shipping_line ? parseFloat(order.shipping_line.price).toFixed(2) : '0.00'
     }))
@@ -164,6 +166,27 @@ const FinancialTable = ({ data, onExport, loading, pagination, filters }) => {
             {row.product_sub_brand}
           </span>
         );
+      case 'product_customer_sub_brand': {
+        // Handle different customer sub-brand values with appropriate styling
+        const customerSubBrand = row.product_customer_sub_brand;
+        let badgeClass = "inline-flex px-2 py-1 text-xs font-medium rounded-full";
+        
+        if (customerSubBrand === 'No Customer Sub-Brand' || customerSubBrand === 'N/A') {
+          badgeClass += " bg-gray-100 text-gray-600";
+        } else if (customerSubBrand.startsWith('[') && customerSubBrand.endsWith(']')) {
+          // JSON array format - show as fallback data
+          badgeClass += " bg-orange-100 text-orange-700 border border-orange-200";
+        } else {
+          // Actual customer selection
+          badgeClass += " bg-green-100 text-green-800 border border-green-200";
+        }
+        
+        return (
+          <span className={badgeClass} title={customerSubBrand}>
+            {customerSubBrand}
+          </span>
+        );
+      }
       case 'total':
         return <span className="font-semibold">{row.currency} {row.total}</span>;
       case 'financial_status':
@@ -464,7 +487,8 @@ FinancialTable.propTypes = {
       title: PropTypes.string,
       quantity: PropTypes.number,
       collection: PropTypes.string,
-      sub_brand: PropTypes.string
+      sub_brand: PropTypes.string,
+      customer_sub_brand: PropTypes.string
     }))
   })).isRequired,
   onExport: PropTypes.func.isRequired,

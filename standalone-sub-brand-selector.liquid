@@ -1,0 +1,103 @@
+{%- comment -%}
+Alternative Standalone Customer Sub-Brand Selector
+Place this code directly in your product template where you want the selector to appear
+{%- endcomment -%}
+
+{%- if product.metafields.custom.customer_sub_brand != blank -%}
+  {%- assign raw_value = product.metafields.custom.customer_sub_brand | strip -%}
+  {%- assign cleaned_value = raw_value | remove: '[' | remove: ']' | remove: '"' -%}
+  {%- assign sub_brands = cleaned_value | split: ',' -%}
+  
+  {%- comment -%} Start of Customer Sub-Brand Selector {%- endcomment -%}
+  <div class="customer-sub-brand-wrapper" style="margin: 20px 0; padding: 20px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px;">
+    <h3 style="margin: 0 0 10px 0; font-size: 18px; font-weight: 600; color: #212529;">
+      Choose Your Sub Brand
+    </h3>
+    
+    <p style="margin: 0 0 15px 0; font-size: 14px; color: #6c757d;">
+      Please select your preferred sub brand before adding to cart.
+    </p>
+    
+    <div style="position: relative; margin-bottom: 10px;">
+      <select 
+        name="properties[Customer Sub-Brand]" 
+        id="customer-sub-brand-selector"
+        required
+        style="
+          width: 100%; 
+          padding: 12px 40px 12px 12px; 
+          font-size: 16px; 
+          border: 2px solid #ced4da; 
+          border-radius: 6px; 
+          background-color: white; 
+          color: #495057;
+          appearance: none;
+          cursor: pointer;
+        "
+      >
+        <option value="">-- Select Sub Brand --</option>
+        {%- for brand in sub_brands -%}
+          {%- assign trimmed_brand = brand | strip -%}
+          {%- if trimmed_brand != blank -%}
+            <option value="{{ trimmed_brand }}">{{ trimmed_brand }}</option>
+          {%- endif -%}
+        {%- endfor -%}
+      </select>
+      
+      {%- comment -%} Custom dropdown arrow {%- endcomment -%}
+      <div style="
+        position: absolute; 
+        top: 50%; 
+        right: 12px; 
+        transform: translateY(-50%); 
+        pointer-events: none; 
+        color: #6c757d;
+      ">
+        ▼
+      </div>
+    </div>
+    
+    <div id="sub-brand-error" style="
+      display: none; 
+      padding: 10px; 
+      background: #f8d7da; 
+      color: #721c24; 
+      border: 1px solid #f5c6cb; 
+      border-radius: 4px; 
+      font-size: 14px;
+    ">
+      Please select a sub brand before adding to cart.
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const subBrandSelect = document.getElementById('customer-sub-brand-selector');
+      const errorDiv = document.getElementById('sub-brand-error');
+      const productForms = document.querySelectorAll('form[action*="/cart/add"]');
+      
+      // Validate on form submission
+      productForms.forEach(function(form) {
+        form.addEventListener('submit', function(e) {
+          if (!subBrandSelect.value) {
+            e.preventDefault();
+            errorDiv.style.display = 'block';
+            subBrandSelect.focus();
+            subBrandSelect.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            return false;
+          } else {
+            errorDiv.style.display = 'none';
+          }
+        });
+      });
+      
+      // Clear error when user selects something
+      subBrandSelect.addEventListener('change', function() {
+        if (this.value) {
+          errorDiv.style.display = 'none';
+          console.log('Customer selected:', this.value);
+        }
+      });
+    });
+  </script>
+{%- endif -%}

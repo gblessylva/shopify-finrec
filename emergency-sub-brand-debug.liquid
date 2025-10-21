@@ -1,0 +1,78 @@
+{%- comment -%}
+EMERGENCY FIX: Direct Customer Sub-Brand Integration
+Place this code directly BEFORE the buy buttons in your main-product.liquid file
+Find the buy_buttons block and add this code right before it
+{%- endcomment -%}
+
+{%- comment -%} Customer Sub-Brand EMERGENCY Integration {%- endcomment -%}
+{%- if product.metafields.custom.customer_sub_brand != blank -%}
+  {%- assign raw_value = product.metafields.custom.customer_sub_brand | strip -%}
+  {%- assign cleaned_value = raw_value | remove: '[' | remove: ']' | remove: '"' -%}
+  {%- assign sub_brands = cleaned_value | split: ',' -%}
+  
+  <div class="emergency-customer-sub-brand" style="margin-bottom: 20px; padding: 15px; border: 2px solid #007c89; border-radius: 8px; background: #f0f9ff;">
+    <label for="emergency-customer-sub-brand" style="display: block; font-weight: bold; margin-bottom: 10px; color: #007c89;">
+      🏷️ Customer Sub-Brand (Required):
+    </label>
+    
+    <select 
+      id="emergency-customer-sub-brand"
+      name="properties[Customer Sub-Brand]" 
+      required
+      style="
+        width: 100%; 
+        padding: 12px; 
+        font-size: 16px; 
+        border: 2px solid #007c89; 
+        border-radius: 6px; 
+        background: white;
+        color: #333;
+      "
+      onchange="console.log('EMERGENCY DEBUG: Selected value:', this.value)"
+    >
+      <option value="">-- MUST SELECT SUB BRAND --</option>
+      {%- for brand in sub_brands -%}
+        {%- assign trimmed_brand = brand | strip -%}
+        {%- if trimmed_brand != blank -%}
+          <option value="{{ trimmed_brand }}">✅ {{ trimmed_brand }}</option>
+        {%- endif -%}
+      {%- endfor -%}
+    </select>
+    
+    <p style="margin-top: 8px; font-size: 12px; color: #666;">
+      🚨 DEBUG MODE: This field should capture your selection as a line item property
+    </p>
+  </div>
+{%- endif -%}
+
+{%- comment -%} EMERGENCY DEBUG SCRIPT {%- endcomment -%}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  console.log('🚨 EMERGENCY DEBUG: Customer Sub-Brand form loaded');
+  
+  // Find all forms that add to cart
+  const forms = document.querySelectorAll('form[action*="/cart/add"]');
+  console.log('🚨 Found forms:', forms.length);
+  
+  forms.forEach(function(form, index) {
+    console.log('🚨 Form ' + index + ' ID:', form.id);
+    
+    form.addEventListener('submit', function(e) {
+      const subBrandSelect = document.getElementById('emergency-customer-sub-brand');
+      const selectedValue = subBrandSelect ? subBrandSelect.value : 'NOT FOUND';
+      
+      console.log('🚨 FORM SUBMISSION DEBUG:');
+      console.log('  - Form ID:', form.id);
+      console.log('  - Sub-brand value:', selectedValue);
+      console.log('  - Form data:', new FormData(form));
+      
+      // Don't prevent submission, just log
+      if (!selectedValue || selectedValue === '') {
+        alert('🚨 DEBUG: No sub-brand selected! This will help us debug why properties are not captured.');
+      } else {
+        alert('🚨 DEBUG: Sub-brand selected: ' + selectedValue + '. Check console for form data.');
+      }
+    });
+  });
+});
+</script>
